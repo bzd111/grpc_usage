@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/base64"
 	"io/ioutil"
 	"log"
 	"path/filepath"
@@ -41,7 +42,13 @@ func main() {
 		log.Fatalf("failed to append ca certs")
 	}
 
+	auth := basicAuth{
+		username: "admin",
+		password: "admin",
+	}
+
 	opts := []grpc.DialOption{
+		grpc.WithPerRPCCredentials(auth),
 		grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{
 			ServerName:   hostname,
 			Certificates: []tls.Certificate{certificate},
@@ -77,4 +84,21 @@ func main() {
 	}
 
 	log.Printf("Product: %s", product.String())
+}
+
+type basicAuth struct {
+	username string
+	password string
+}
+
+func (b basicAuth) GetRequestMetadata(ctx context.Context, in ...string) (map[string]string, error) {
+	auth := b.username + ":" + b.password
+	enc := base64.StdEncoding.EncodeToString([]byte(auth))
+	return map[string]string{
+		"authorization": "Basic " + enc,
+	}, nil
+}
+
+func (b basicAuth) RequireTransportSecurity() bool {
+	return true
 }

@@ -4,25 +4,32 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/base64"
 	"errors"
 	"io/ioutil"
 	"log"
 	"net"
 	pb "order_service/proto"
 	"path/filepath"
+	"strings"
 
 	"github.com/golang/protobuf/ptypes/wrappers"
 	wrapper "github.com/golang/protobuf/ptypes/wrappers"
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 )
 
 var (
-	port    = ":50051"
-	crtFile = filepath.Join("..", "certs", "server.crt")
-	keyFile = filepath.Join("..", "certs", "server.key")
-	caFile  = filepath.Join("..", "certs", "ca.crt")
+	port               = ":50051"
+	crtFile            = filepath.Join("..", "certs", "server.crt")
+	keyFile            = filepath.Join("..", "certs", "server.key")
+	caFile             = filepath.Join("..", "certs", "ca.crt")
+	errMissingMetadata = status.Errorf(codes.InvalidArgument, "missing metadata")
+	errInvalidToken    = status.Errorf(codes.Unauthenticated, "invalid credentials")
 )
 
 type server struct {
@@ -83,4 +90,29 @@ func main() {
 	if err := s.Serve(lis); err != nil {
 		log.Fatalf("failed to sever: %v", err)
 	}
+}
+
+func valid(authorization []string) bool {
+	if len(authorization) < 1 {
+		return false
+	}
+	token := strings.TrimPrefix(authorization[0], "Basic ")
+	return token == base64.StdEncoding.EncodeToString([]byte("admin:admin"))
+}
+
+func ensureValidBasicCredentials(
+	ctx context.Context,
+	req interface{},
+	info *grpc.UnaryServerInfo,
+	handler grpc.UnaryHandler,
+) (interface{}, error) {
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return nil, errMissingMetadata
+	}
+
+	if !valid(md["authorization"]) {
+		return nil, errInvalidToken
+	}
+	return handler(ctx, req)
 }
