@@ -6,25 +6,31 @@ import (
 	"crypto/x509"
 	"io/ioutil"
 	"log"
+	"net/http"
 	"path/filepath"
-	"time"
 
-	pb "order_client/proto"
+	gw "order_client/gw"
 
-	"github.com/golang/protobuf/ptypes/wrappers"
+	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )
 
 var (
-	hostname = "localhost"
-	address  = "localhost:50051"
-	crtFile  = filepath.Join("..", "certs", "client.crt")
-	keyFile  = filepath.Join("..", "certs", "client.key")
-	caFile   = filepath.Join("..", "certs", "ca.crt")
+	hostname           = "localhost"
+	crtFile            = filepath.Join("..", "certs", "client.crt")
+	keyFile            = filepath.Join("..", "certs", "client.key")
+	caFile             = filepath.Join("..", "certs", "ca.crt")
+	grpcServerEndpoint = "localhost:50051"
 )
 
 func main() {
+	ctx := context.Background()
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	mux := runtime.NewServeMux()
 	certificate, err := tls.LoadX509KeyPair(crtFile, keyFile)
 	if err != nil {
 		log.Fatalf("could not load client key pair: %s", err)
@@ -49,32 +55,14 @@ func main() {
 		})),
 	}
 
-	conn, err := grpc.Dial(address, opts...)
+	err = gw.RegisterProductInfoHandlerFromEndpoint(ctx, mux, grpcServerEndpoint, opts)
 	if err != nil {
-		log.Fatalf("did not connect: %v", err)
-	}
-	defer conn.Close()
-
-	c := pb.NewProductInfoClient(conn)
-
-	name := "Samsung S10"
-
-	description := "Samsung Galaxy S10 is the latest smart phone, launched in February 2019"
-	price := float32(700.0)
-
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-
-	defer cancel()
-	r, err := c.AddProduct(ctx, &pb.Product{Name: name, Description: description, Price: price})
-	if err != nil {
-		log.Fatalf("Could not add product: %v", err)
-	}
-	log.Printf("Product ID: %s added successfully", r.Value)
-
-	product, err := c.GetProduct(ctx, &wrappers.StringValue{Value: r.Value})
-	if err != nil {
-		log.Fatalf("Could not get product: %v", err)
+		log.Fatalf("Fail to registerr gRPC service endpoint: %v", err)
+		return
 	}
 
-	log.Printf("Product: %s", product.String())
+	if err := http.ListenAndServe(":8081", mux); err != nil {
+		log.Fatalf("Could not setup HTTP endpoint: %v", err)
+	}
+
 }

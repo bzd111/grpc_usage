@@ -8,7 +8,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net"
-	pb "order_service/proto"
+	pb "order_service/gw"
 	"path/filepath"
 
 	"github.com/golang/protobuf/ptypes/wrappers"
@@ -16,6 +16,7 @@ import (
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/reflection"
 )
 
 var (
@@ -74,12 +75,14 @@ func main() {
 	}
 
 	s := grpc.NewServer(opts...)
-	pb.RegisterProductInfoServer(s, &server{})
 
 	lis, err := net.Listen("tcp", port)
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
+
+	pb.RegisterProductInfoServer(s, &server{})
+	reflection.Register(s)
 	if err := s.Serve(lis); err != nil {
 		log.Fatalf("failed to sever: %v", err)
 	}

@@ -1,12 +1,24 @@
 syntax = "proto3";
 
+import "google/api/annotations.proto";
 import "google/protobuf/wrappers.proto";
 
 package proto;
+option go_package = "server/gw";
 
 service ProductInfo {
-    rpc AddProduct(Product) returns (google.protobuf.StringValue);
-    rpc GetProduct(google.protobuf.StringValue) returns (Product);
+    rpc AddProduct(Product) returns (google.protobuf.StringValue) {
+        option (google.api.http) = {
+            post : "/v1/product",
+            body : "*"
+        };
+    }
+
+    rpc GetProduct(google.protobuf.StringValue) returns (Product) {
+        option (google.api.http) = {
+            get : "/v1/product/{value}",
+        };
+    }
 }
 
 message Product {
@@ -15,7 +27,3 @@ message Product {
     string name = 3;
     float price = 4;
 }
-
-// message ProductID {
-//     string value = 1;
-// }
