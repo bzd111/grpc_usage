@@ -14,6 +14,12 @@ import (
 	"github.com/golang/protobuf/ptypes/wrappers"
 	wrapper "github.com/golang/protobuf/ptypes/wrappers"
 	"github.com/google/uuid"
+	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
+
+	// grpc_zap "github.com/grpc-ecosystem/go-grpc-middleware/logging/zap"
+	grpc_recovery "github.com/grpc-ecosystem/go-grpc-middleware/recovery"
+	grpc_opentracing "github.com/grpc-ecosystem/go-grpc-middleware/tracing/opentracing"
+	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )
@@ -23,6 +29,8 @@ var (
 	crtFile = filepath.Join("..", "certs", "server.crt")
 	keyFile = filepath.Join("..", "certs", "server.key")
 	caFile  = filepath.Join("..", "certs", "ca.crt")
+
+	// zapLogger *zap.Logger
 )
 
 type server struct {
@@ -63,6 +71,12 @@ func main() {
 	if ok := certPool.AppendCertsFromPEM(ca); !ok {
 		log.Fatalf("failed to append cient certs")
 	}
+	// zapOpts := []grpc_zap.Option{
+	// grpc_zap.WithLevels(zap.ErrorLevel),
+	// }
+
+	// grpc_zap.ReplaceGrpcLoggerV2(zapLogger)
+
 	opts := []grpc.ServerOption{
 		grpc.Creds(
 			credentials.NewTLS(&tls.Config{
@@ -71,6 +85,22 @@ func main() {
 				ClientCAs:    certPool,
 			},
 			)),
+		grpc.StreamInterceptor(grpc_middleware.ChainStreamServer(
+			grpc_opentracing.StreamServerInterceptor(),
+			grpc_prometheus.StreamServerInterceptor,
+			// grpc_zap.StreamServerInterceptor(zapLogger, zapOpts...),
+			// grpc_zap.StreamServerInterceptor(zapLogger),
+			// grpc_auth.StreamServerInterceptor(myAuthFunction),
+			grpc_recovery.StreamServerInterceptor(),
+		)),
+		grpc.UnaryInterceptor(grpc_middleware.ChainUnaryServer(
+			grpc_opentracing.UnaryServerInterceptor(),
+			grpc_prometheus.UnaryServerInterceptor,
+			// grpc_zap.UnaryServerInterceptor(zapLogger, zapOpts...),
+			// grpc_zap.UnaryServerInterceptor(zapLogger),
+			// grpc_auth.UnaryServerInterceptor(myAuthFunction),
+			grpc_recovery.UnaryServerInterceptor(),
+		)),
 	}
 
 	s := grpc.NewServer(opts...)
